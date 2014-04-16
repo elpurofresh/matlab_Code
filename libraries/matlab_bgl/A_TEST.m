@@ -1,0 +1,21 @@
+clear; clc;
+%a = zeros(6,6);
+a = [0 1 1 0 0 0;
+     1 0 0 1 0 0;
+     1 0 0 0 0 0;
+     0 1 0 0 1 1;
+     0 0 0 1 0 0;
+     0 0 0 1 0 0];
+ [i,j,s] = find(a);
+ [m,n] = size(a);
+ V = sparse(i,j,s,m,n);
+ 
+ b = ['a'; 'b'; 'c'; 'd'; 'e'; 'f'];
+ 
+ C = struct('labels', b, 'Z', V);
+ 
+[d dt pred] = bfs(V,1);
+[ignore order] = sort(dt);
+%labels(order)
+treeplot(pred);
+worstCase = max(d);

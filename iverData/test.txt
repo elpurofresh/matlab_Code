@@ -1,0 +1,3 @@
+Sally;Type1;12.34;45;Yes;
+Joe;Type2;23.54;60;No;
+Bill;Type1;34.90;12;No;

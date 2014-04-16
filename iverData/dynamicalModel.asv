@@ -1,0 +1,134 @@
+%%% Based on
+%%% http://www.weizmann.ac.il/matlab/toolbox/ident/ch3tut3.html
+
+
+%% Clear workspace
+clear;clc;
+
+%% Read data from file
+filename1 = 'C:\andres\Dropbox\ASU\Projects\iver\Raw Data\IVER Data\20120208_143853_pleasant_2_7_12_lawn1_short_300_500_IVER2-95.log'; %'Lawn_horiz_1v2.log';
+[gpsSpd1, gpsTrueHead1, powerWatts1] = ...
+    textread(filename1, '%*n%*n%*s%*s%*n%n%n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%n%*n%*n%*n%*s%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*s%*n%*n%*n%*n%*n%*n%*[^\n]', 'delimiter', ';', 'headerlines', 1);
+
+filename2 = 'C:\andres\Dropbox\ASU\Projects\iver\Raw Data\IVER Data\20120208_155753_pleasant_2_7_12_lawn_300_1000_forward_IVER2-95.log';
+[gpsSpd2, gpsTrueHead2, powerWatts2] = ...
+    textread(filename2, '%*n%*n%*s%*s%*n%n%n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%n%*n%*n%*n%*s%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*s%*n%*n%*n%*n%*n%*n%*[^\n]', 'delimiter', ';', 'headerlines', 1);
+
+%% Create input and output matrices
+input1 = [gpsSpd1, gpsTrueHead1];
+output1 = powerWatts1;
+
+input2 = [gpsSpd2, gpsTrueHead2];
+
+
+%% Create data object
+dataObject = iddata(output1, input1, 0.5); %time interval is 2Hz = 0.5secs
+
+%% Naming inputs & outputs
+dataObject.InputName  = {'GpsSpd1', 'Orient1'};
+dataObject.OutputName = 'Power1';
+
+%% Select First half of data for evaluation
+% building a model
+numSamples = length(input1)/2;
+
+%numSamples = length(input);
+ze = dataObject(1:numSamples);
+
+%% Plot the input and output data from experiment
+% hold off;
+% subplot(3,1,1);
+% plot(gpsSpd1);
+% legend('gpsSpd1');
+% 
+% subplot(3,1,2);
+% plot(gpsTrueHead1);
+% legend('gpsTrueHead1');
+% 
+% subplot(3,1,3);
+% plot(powerWatts1);
+% legend('powerWatts1');
+% grid on;
+
+%% Plot the interval sample from 200 to 300
+plot(ze(1:numSamples)); %plot(ze(200:300));
+
+%% Remove the constant levels and make the data zero-mean.
+ze = detrend(ze);
+
+%% Let us first estimate the impulse response of the system by correlation analysis 
+% to get some idea of time constants and the like.
+impulse(ze,'sd',3);
+
+%% Estimate a discrete-time state-space model using n4sid, which applies the
+%  subspace method. (orders 2 to 8)
+%opt = {'Focus', 'simulation'};
+init_sys = n4sid(ze,2:8,'Focus', 'simulation'); %simulation stability
+
+%% Build a state-space model where the order is automatically determined,
+%  using a prediction error method.
+%model = pem(ze);
+model = pem(ze, init_sys);
+
+%% Simulate it and compare the model output with measured output. We then
+%  select a portion of the original data that was not used to build the model, 
+%  e.g., from sample 800 to 900.
+zv = dataObject(numSamples:end);
+zvDetrend = detrend(zv);
+compare(zvDetrend,model);
+
+%% To retrieve the properties/matrices/vectors of this model we could, e.g., find the A
+% matrix of the state space representation by
+%ModelProps = model.a;
+A = model.a;
+B = model.b;
+C = model.c;
+D = model.d;
+K = model.k;
+x_ini = model.x;
+
+numInputs2 = length(input2); %/2;
+
+t = 0:1:numInputs2-1; % time vector
+
+u = input2; % Input vector
+
+output1 = lsim(A, B, C, D, u, t);
+
+plot(t,output1,'b'), grid,xlabel('Time (s)'), ylabel('Power'),title('Output Signals for the Systems');
+
+%% The Bode plot of the model is obtained by
+bode(model);
+
+%% An alternative is to consider the Nyquist plot, and mark uncertainty
+% regions at certain frequencies with ellipses, corresponding to 3 (say) standard deviations:
+nyquist(model,'sd',3);
+
+%% Compare the step response of the model with one that is directly computed 
+% from data (ze) in a nonparametric way.
+step(model,ze);
+
+%% To study a model with prescribed structure, we compute a difference equation model 
+%with two poles, one zero, and three delays.
+%model2 = arx(ze,[2 2 2]);
+%model2 = arx(ze);
+model2 = arx(ze,'na',1,'nb',[4 2],'nk',[1 2]);
+
+%% To compare its performance on validation data with model, type
+compare(zvDetrend, model, model2); 
+
+%% Compute and plot the poles and zeros of the models.
+pzmap(model, model2); 
+%pzmap(model); 
+
+%% The uncertainties of the poles and zeros can also be plotted.
+pzmap(model, model2,'sd',3); % '3' denotes the number of standard deviations
+%pzmap(model, 'sd',3);
+
+%% Estimate the frequency response by a nonparametric spectral analysis method.
+gs = spa(ze);
+
+%% Compare with the frequency functions from the parametric models.
+bode(model, model2, gs);
+%bode(model, gs);
+

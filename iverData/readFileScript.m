@@ -1,0 +1,195 @@
+
+%% Clear workspace
+clear;clc;
+
+%% Read data from file
+filename = 'C:\andres\Dropbox\iver\Raw Data\IVER Data\20120208_143853_pleasant_2_7_12_lawn1_short_300_500_IVER2-95.log'; %'Lawn_horiz_1v2.log';
+%[lat, lon, time, date, numSats, gpsSpd, gpsTrueHead, gpsMagVar, hdop, cMagHead, cTrueHead, pitchAng, rollAng, cInsTemp, dfsDepth, dtbHeight, totWatClmn, batPcnt, powerW, wattHrs, batVolt, batAmp, batState, timeToEmpty, curStp, disToNxt, nxtSpd, vehicleSpd, motorSpdCmd, nxtHead, nxtLon, nxtDepth, depthGoal, vehicleState, errState, finPtchR, finPtchL, ptchGoal, finYawT, finYawB, yawGoal, finRoll] = ...
+%    textread(filename, '%n%n%s%s%n%n%n%n%n%n%n%n%n%n%n%n%n%n%n%n%n%n%s%n%n%n%n%n%n%n%n%n%n%n%n%s%n%n%n%n%n%n%*[^\n]', 'delimiter', ';', 'headerlines', 1);
+[gpsSpd, gpsTrueHead, powerWatts] = ...
+    textread(filename, '%*n%*n%*s%*s%*n%n%n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%n%*n%*n%*n%*s%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*n%*s%*n%*n%*n%*n%*n%*n%*[^\n]', 'delimiter', ';', 'headerlines', 1);
+
+
+
+%% Declare and initialize variables
+% numValues must be equal to number of rows in filename
+numValues = 6532;% 583;
+numInputs = 2;
+time = zeros(numValues, 1);
+
+for i = 1:numInputs
+    inputVals = zeros(numValues,i);
+    inputValid = zeros(numValues,i);
+end
+
+timeInterval = 1; %1/60; % 1 second in minutes.
+
+%% Put two input vectors into a single matrix
+for i = 1:numValues
+    time(i,1) = i;
+    
+    for j = 1:numInputs
+        if j == 1
+            inputValid(i,j) = gpsSpd(i);
+        else
+            inputValid(i,j) = gpsTrueHead(i);
+        end
+    end
+end
+
+%% Plot the input and output data from experiment
+hold off;
+plot(time,gpsSpd,time,powerWatts)
+legend('gpsSpd','powerWatts')
+figure
+plot(time,gpsTrueHead,time,powerWatts)
+legend('gpsTrueHead','powerWatts')
+grid on;
+
+%% Remove the equilibrium values from inputs and outputs in both experiments:
+gpsSpd = gpsSpd - ones(size(gpsSpd,1),1)*mean(gpsSpd(1:50,:));
+gpsTrueHead = gpsTrueHead - ones(size(gpsTrueHead,1),1)*mean(gpsTrueHead(1:50,:));
+powerWatts = powerWatts - mean(powerWatts(1:50,:));
+
+%% Generate ad-hoc timestamp (Based on actual values from the file)
+%  and put two input test vectors into a single matrix
+for i = 1:numValues    
+    for j = 1:numInputs
+        if j == 1
+            inputVals(i,j) = gpsSpd(i);
+        else
+            inputVals(i,j) = gpsTrueHead(i);
+        end
+    end
+end
+
+%% Create two data objects, ze and zv.
+Ts = timeInterval; % Sampling interval is 0.0167 min = 1sec
+% ze = iddata(powerWatts,gpsSpd,Ts);
+% zv = iddata(powerWatts,gpsTrueHead,Ts);
+ze = iddata(powerWatts,inputVals,Ts);
+zv = iddata(powerWatts,inputValid,Ts);
+
+% Set time units to minutes
+ze.TimeUnit = 'sec';
+% Set names of input channels
+ze.InputName = {'GPS Speed','GPS Heading'};
+% Set units for input variables
+ze.InputUnit = {'m/s','Deg'};
+% Set name of output channel
+ze.OutputName = 'Power';
+% Set unit of output channel
+ze.OutputUnit = 'Watts';
+
+% Set validation data properties
+zv.TimeUnit = 'sec';
+zv.InputName = {'GPS Speed Validation','GPS Heading Validation'};
+zv.InputUnit = {'m/s','Deg'};
+zv.OutputName = 'Power';
+zv.OutputUnit = 'Watts';
+
+
+%% Plot estimation data
+hold off;
+grid on;
+plot(ze);
+
+%% Plot validation data
+
+figure   % Open a new MATLAB Figure window
+hold off;
+grid on;
+plot(zv) % Plot the validation data
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%Estimating model as a Continuous Transfer Function
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Use the idproc command to create two model structures, 
+% one for each input/output combination:
+midproc0 = idproc({'P2ZUD','P1D'});
+
+%% Set the time delay property of the model object to 8 min and 10 min 
+% for each input/output pair as initial guesses. 
+% Also, set an upper limit on the delay because good initial guesses are available.
+midproc0.Td.value = [8 10];
+midproc0.Td.max = [9 11];
+
+%% "midproc0" as the model structure and ze as the estimation data:
+midproc = pem(ze,midproc0);
+present(midproc);
+
+%% Plot that compares the actual output and the model output using the compare command:
+compare(zv,midproc);
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Estimating model as a Black box Model using the ARX (AutoRegressive
+% eXogenous) method
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Compute the polynomial coefficients using the fast, noniterative method "arx"
+marx = arx(ze,'na',3,'nb',[2 1],'nk',[4 8]);
+present(marx); % Displays model parameters with uncertainty information
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Estimating model as a Black box Model using the State-Space Models
+% (n4sid)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% "spa" estimates the transfer function using spectral analysis for a fixed
+%% frequency resolution.
+Ge=spa(ze);
+
+%% Plot the frequency response as a Bode plot
+bode(Ge);
+
+%% Estimate the step response from the data
+step(ze,5);
+
+%% The "delayest" command estimates the time delay in a dynamic system by
+% estimating a low-order, discrete-time ARX model with a range of delays, and 
+% then choosing the delay that corresponding to the best fit.
+delay = delayest(ze);
+
+%% To estimate model order for the first input/output combination:
+%1. Use struc to create a matrix of possible model orders.
+NN1 = struc(2:5,1:5,5);
+%2. Use selstruc to compute the loss functions for the ARX models with the
+%orders in NN1.
+
+%% 
+selstruc(arxstruc(ze(:,:,1),zv(:,:,1),NN1));
+%3. Click Select to choose that combination of orders, i.e:
+%na=2
+%nb=2
+%nk=5
+%To continue, press any key while in the MATLAB Command Window.
+
+%% To estimate model order for the second input/output combination:
+%1. Use struc to create a matrix of possible model orders.
+NN2 = struc(1:3,1:3,10);
+
+%% 
+%2. Use selstruc to compute the loss functions for the ARX models with the orders in NN2.
+selstruc(arxstruc(ze(:,:,2),zv(:,:,2),NN2));
+
+
+%% Use the n4sid command to specify a range of model orders and
+% evaluate the performance of several state-space models (orders 2 to 8):
+mn4sid = n4sid(ze,2:8,'nk',[5 10]);
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Compare the output of the ARX, and state-space models to the measured
+% output
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Compare plots the measured output in the validation data set against 
+% the simulated output from the models. The input data from the validation data set 
+% serves as input to the models.
+%compare(zv, marx, mn4sid);
+compare(zv, marx);
+
+%% Perform residual analysis on the state-space model, type the following command:
+resid(zv,mn4sid);
+
+
+
