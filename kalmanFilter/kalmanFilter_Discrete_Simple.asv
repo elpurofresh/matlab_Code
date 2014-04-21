@@ -1,0 +1,106 @@
+%% --------------------------
+%   By Andres Mora; April 10, 2014
+%   Kalman Filter to estimate the value of a spring-mass system
+%   supported on a movable platform
+
+% Clear screen and variable space
+clc;
+%clear;
+
+% Declare variables
+
+r=1;
+%create a random sequence of numbers. function randn draws numbers from standard 
+%normal distribution
+noise = randn(1,50);
+%create the random white noise sequence by multiplying the set of random numbers by the %standard deviation (tipiki apoklisi) of w 
+w = sqrt(r)*noise;
+%create the measurements vector
+z = zeros(1, 50);
+%create the true measurement vector
+z_true = ones(1, 50);
+%z_true(1, :) = sin(pi);
+
+for i = 1:50
+    z_true(1, i) = 5*sin(-i*pi);
+    z(1, i) = 10*(sin((50-i)*pi)); % + w(1, i)); 
+end
+
+k = 0.45;    % Hooke elastic constant
+b = 0.06;    % Damping coefficient constant
+m = 1.0;     % Mass in kg
+
+A = [0 1; -k/m -b/m];
+B = [b/m; (-k/m - (b/m)^2)];
+H = [1 0];
+
+Q = zeros(2);
+R = 1; %eye(2);
+
+u = sin(2*pi); %10.0;
+I = eye(2);
+
+xhat_prior  =  zeros(2, 50);        %<x_(k-1)
+p_prior     =  zeros(2,2, 50);      %P_(k-1)
+
+xhat_post   = ones(2, 50);          %<x_k-
+p_post      = zeros(2,2, 50);       %P_k-
+
+K_gain      = zeros(2, 50);         %K_k, Kalman gain
+
+% Initial Values
+xhat_prior(:, 1) = [0; 0];
+p_prior(:,:, 1)  = [1 1; 1 1];
+
+% First iteration
+xhat_post(:, 1) = A * xhat_prior(:, 1) + B * u;
+p_post(:,:, 1)  = (A * p_prior(:,:, 1) * A') + Q;
+K_gain(:, 1)    = (p_post(:,:, 1) * H') / (H* p_post(:,:, 1) * H' + R);
+xhat_prior(:, 1)= xhat_post(:, 1) + K_gain(:, 1) * (z(:, 1) - H * xhat_post(:, 1));
+p_prior(:,:, 1) = (I - K_gain(:, 1) * H) * p_post(:,:, 1);   
+
+for i = 2: 50
+    %project the state ahead
+    xhat_post(:, i) = A * xhat_prior(:, i) + B * u;
+        
+    %project the error covariance ahead
+    p_post(:,:, i) = (A * p_prior(:,:, i) * A') + Q;
+    
+    %Compute the Kalman gain
+    K_gain(:, i) = (p_post(:,:, i) * H') / (H* p_post(:,:, i) * H' + R);
+    
+    %Update estimate with measurement z_k
+    xhat_prior(:, i) = xhat_post(:, i) + K_gain(:, i) * (z(:, i) - H * xhat_post(:, i));
+
+    %Update the error covariance
+    p_prior(:,:, i) = (I - K_gain(:, i) * H) * p_post(:,:, i);    
+end
+
+for j = 1: 50
+    x(j) = j;
+end
+
+%subplot(2, 1, 1);
+plot(x, xhat_post(1, x),'b', x, xhat_post(2, x),'r', x, z(:, x),'g', x, z_true(:, x),'k*');
+%legend('estimation','noisy measurements');
+title('Predicted vs Estimated Voltage value');
+
+% subplot(2, 1, 2);
+% plot(x, p_post(1,1, x),'b', x, p_prior(1,1, x),'r');
+% %plot(p_post, 'color', 'r');
+% %hold on;
+% %plot(p_prior, 'color', 'b');
+% title('Error covariance');
+% %hold off;
+% 
+% subplot(3, 1, 3);
+% plot(x, K_gain(:, x), 'color', 'r');
+% title('Kalman Gain');
+% %hold off;
+
+
+
+
+
+
+
