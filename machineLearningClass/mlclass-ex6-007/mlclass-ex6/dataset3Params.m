@@ -1,0 +1,78 @@
+function [C, sigma] = dataset3Params(X, y, Xval, yval)
+%the following definition helps when debugging
+%function [C, sigma, error_master] = dataset3Params(X, y, Xval, yval)
+%EX6PARAMS returns your choice of C and sigma for Part 3 of the exercise
+%where you select the optimal (C, sigma) learning parameters to use for SVM
+%with RBF kernel
+%   [C, sigma] = EX6PARAMS(X, y, Xval, yval) returns your choice of C and 
+%   sigma. You should complete this function to return the optimal C and 
+%   sigma based on a cross-validation set.
+%
+
+% You need to return the following variables correctly.
+C = [0.01 0.03 0.1 0.3 1 3 10 30]; %1;
+sigma = [0.01 0.03 0.1 0.3 1 3 10 30]; %0.3
+
+% ====================== YOUR CODE HERE ======================
+% Instructions: Fill in this function to return the optimal C and sigma
+%               learning parameters found using the cross validation set.
+%               You can use svmPredict to predict the labels on the cross
+%               validation set. For example, 
+%                   predictions = svmPredict(model, Xval);
+%               will return the predictions on the cross validation set.
+%
+%  Note: You can compute the prediction error using 
+%        mean(double(predictions ~= yval))
+%
+
+%predictions = svmTrain('gaussianKernel', Xval);
+%error = mean(double(predictions ~= yval));
+
+%function [model] = svmTrain(X, Y, C, kernelFunction, tol, max_passes)
+%function pred = svmPredict(model, X)
+
+min_error = 100;
+C_tmp = 0;
+sigma_tmp = 0;
+x1 = X(:,1)';
+x2 = X(:,2)';
+error_master = [];
+len_C = numel(C);
+len_sigma = numel(sigma);
+
+for m = 1:len_C
+    for n = 1:len_sigma
+        
+        model = svmTrain(X, y, C(m),...
+            @(x1,x2) gaussianKernel(x1, x2, sigma(n)));
+        
+         predictions = svmPredict(model, Xval);
+         error = mean(double(predictions ~= yval));
+         
+         if(error < min_error)
+             min_error = error;
+             C_tmp = C(m);%_test;
+             sigma_tmp = sigma(n);%_test;
+             
+             error_m = [C_tmp sigma_tmp error];
+             error_master = [error_master; error_m];
+         end
+        
+         
+    end
+end
+
+C = C_tmp;
+sigma = sigma_tmp;
+        
+
+
+
+
+
+
+
+
+% =========================================================================
+
+end
